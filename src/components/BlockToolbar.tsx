@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AiAction } from '../../shared/contract/aiAction'
 
 const QUICK_ACTIONS: Array<{ action: AiAction; label: string; title: string }> = [
@@ -9,34 +9,35 @@ const QUICK_ACTIONS: Array<{ action: AiAction; label: string; title: string }> =
 ]
 
 export interface BlockToolbarProps {
-  /** Screen-space anchor of the hovered block, relative to the editor shell. */
+  /** Screen-space anchor of the target block, relative to the editor shell. */
   top: number
   left: number
   /** True when the user has text selected inside this block. */
   hasSelection: boolean
   busy: boolean
   onAction: (action: AiAction, instruction?: string) => void
+  /** Escape or the close button. */
   onDismiss: () => void
-  /** Pointer entered / left the toolbar itself, so the parent can run its hide timer. */
-  onPointerEnter: () => void
-  onPointerLeave: () => void
 }
 
 /**
- * Floating toolbar pinned below the hovered block. Always scoped to that block
- * (or the active selection inside it) — it never reaches other paragraphs.
+ * Floating toolbar pinned below a block, opened from that block's pencil handle. Always scoped
+ * to that block (or the active selection inside it) — it never reaches other paragraphs. It stays
+ * open until explicitly closed, so moving the pointer around the page never hides it.
  */
-export function BlockToolbar({
-  top,
-  left,
-  hasSelection,
-  busy,
-  onAction,
-  onDismiss,
-  onPointerEnter,
-  onPointerLeave,
-}: BlockToolbarProps) {
+export function BlockToolbar({ top, left, hasSelection, busy, onAction, onDismiss }: BlockToolbarProps) {
   const [instruction, setInstruction] = useState('')
+
+  // Escape closes the toolbar wherever focus is — the instruction input or the editor itself.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onDismiss()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onDismiss])
 
   function submitInstruction() {
     const trimmed = instruction.trim()
@@ -46,16 +47,7 @@ export function BlockToolbar({
   }
 
   return (
-    <div
-      className="block-toolbar"
-      style={{ top, left }}
-      // Keep the toolbar alive while the pointer is on it, not just on the block. Moves over
-      // the toolbar must not reach the paper's hit-testing, which would retarget the hover.
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-      onMouseMove={(event) => event.stopPropagation()}
-      onMouseLeave={(event) => event.stopPropagation()}
-    >
+    <div className="block-toolbar" style={{ top, left }}>
       {hasSelection && <span className="scope-chip">selection</span>}
 
       {QUICK_ACTIONS.map(({ action, label, title }) => (
@@ -75,16 +67,19 @@ export function BlockToolbar({
         placeholder="Tell the AI what to change…"
         value={instruction}
         disabled={busy}
+        autoFocus
         onChange={(event) => setInstruction(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault()
             submitInstruction()
-          } else if (event.key === 'Escape') {
-            onDismiss()
           }
         }}
       />
+
+      <button type="button" className="close" title="Close (Esc)" aria-label="Close" onClick={onDismiss}>
+        ×
+      </button>
     </div>
   )
 }

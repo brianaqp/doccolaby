@@ -240,6 +240,32 @@ button:disabled {
   padding: 3px 8px;
 }
 
+.block-toolbar .close {
+  border-color: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.block-handle {
+  position: absolute;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.block-handle:hover:not(:disabled) {
+  border-color: transparent;
+  background: #f1f1ee;
+}
+
 .instruction-input {
   font: inherit;
   font-size: 12.5px;

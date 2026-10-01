@@ -14,7 +14,7 @@ export function anchorForBlock(
   editor: Editor,
   blockId: string,
   container: HTMLElement | null,
-  placement: 'above' | 'below' = 'above',
+  placement: 'above' | 'below' | 'gutter' = 'above',
 ): Anchor | null {
   if (!container) return null
 
@@ -29,6 +29,8 @@ export function anchorForBlock(
 
   const left = block.left - shell.left
   if (placement === 'below') return { top: block.bottom - shell.top + 4, left }
+  // In the paper's left padding, level with the block's first line.
+  if (placement === 'gutter') return { top: block.top - shell.top + 2, left: left - 30 }
   // Float just above the block's top edge.
   return { top: block.top - shell.top - 38, left }
 }

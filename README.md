@@ -31,14 +31,15 @@ environment — it is never read as a `VITE_*` variable, so it never reaches the
 
 **Two AI surfaces, deliberately kept apart.**
 
-- **Hover a paragraph** → a floating toolbar appears at its edge: *Rewrite, Shorten, Expand, Fix
-  tone*, plus a free-form instruction box. Always scoped to that one block. Select text inside the
+- **Hover a paragraph** → a pencil appears in the left gutter. Click it to open the block toolbar:
+  *Rewrite, Shorten, Expand, Fix tone*, plus a free-form instruction box. The toolbar stays open
+  until you press Esc or its × button, so moving the pointer never makes it vanish. Always scoped to that one block. Select text inside the
   block first and the edit narrows to just that span — the toolbar shows a `selection` chip so the
   scope is never ambiguous.
 - **Top toolbar** → document-level only: five whole-document tone presets (Formal, Casual, Concise,
   Persuasive, Friendly) and the AI on/off toggle.
 
-Doc-level actions are unreachable from the hover toolbar and vice versa. Conflating "tighten this
+Doc-level actions are unreachable from the block toolbar and vice versa. Conflating "tighten this
 sentence" with "rewrite my whole document" is the fastest way to make an editor feel unsafe.
 
 **Diffs are inline, not side-by-side.** A proposal renders as ProseMirror decorations *inside the
@@ -57,7 +58,7 @@ all-or-nothing "apply".
 **Tone is sticky.** Apply a document tone and that tone is injected into the system prompt of every
 later block-level edit, so a single paragraph nudge does not drift back out of the voice you chose.
 
-**AI off means off.** The toggle hides the hover toolbar, blocks every request, and clears any
+**AI off means off.** The toggle hides the block toolbar and its pencil, blocks every request, and clears any
 pending proposals. What is left is a plain Markdown editor.
 
 **Blank page, saved locally.** The editor opens empty, or with your last draft: the markdown is saved
@@ -86,7 +87,7 @@ schema via `z.toJSONSchema()`. Zod emits `additionalProperties: false` with ever
 which is exactly what OpenRouter's strict mode wants. There is no hand-maintained second copy of the
 shape to drift.
 
-**No agentic loop.** The client already knows the target range (hovered block id, or the current
+**No agentic loop.** The client already knows the target range (the toolbar's block id, or the current
 selection), so every action is one request and one response. Adding a capability is a new enum
 member in `AI_ACTIONS` plus a client handler — no change to the request cycle.
 

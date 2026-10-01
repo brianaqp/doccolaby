@@ -6,11 +6,12 @@ import type { AiAction, RefineTurn, TonePreset } from '../shared/contract/aiActi
 import { structureToMarkdown } from '../shared/contract/structure'
 import { requestAiAction, requestStructure } from './ai/client'
 import { editorExtensions } from './editor/extensions'
-import { blockEntries, getBlockIdAt, getBlockMarkdown, getDocumentMarkdown, listBlocks } from './editor/blocks'
+import { blockEntries, getBlockIdAt, getBlockIdAtY, getBlockMarkdown, getDocumentMarkdown, listBlocks } from './editor/blocks'
 import { loadDraft, saveDraft } from './editor/draftStorage'
 import { getSuggestion, getSuggestions } from './editor/SuggestionDecorations'
 import { acceptSuggestion, rejectSuggestion } from './editor/applySuggestion'
 import { anchorForBlock } from './components/anchors'
+import { BlockHandle } from './components/BlockHandle'
 import { BlockToolbar } from './components/BlockToolbar'
 import { DocReviewBar } from './components/DocReviewBar'
 import { SuggestionCard } from './components/SuggestionCard'
@@ -18,9 +19,6 @@ import { TopToolbar } from './components/TopToolbar'
 
 // Only needed on a blank page, so it stays out of the main bundle.
 const StructurePrompt = lazy(() => import('./components/StructurePrompt'))
-
-/** How long the toolbar lingers after the pointer leaves both the block and the toolbar. */
-const HOVER_HIDE_DELAY_MS = 200
 
 /** Typing settles for this long before the draft is written to localStorage. */
 const SAVE_DELAY_MS = 400
@@ -45,45 +43,11 @@ export function App() {
   const [docStyle, setDocStyle] = useState<TonePreset | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The block under the pointer shows a pencil handle; clicking it opens that block's toolbar,
+  // which then stays put until Escape or its close button — hovering elsewhere never hides it.
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  // Mirrors of the live hover state for the mousemove handler: the block currently shown,
-  // and the target (a block id, or null for hide) the pending timer will switch to.
-  const shownId = useRef<string | null>(null)
-  const pendingTarget = useRef<string | null | undefined>(undefined)
-
-  const showHover = useCallback((id: string | null) => {
-    shownId.current = id
-    setHoveredId(id)
-  }, [])
-  const cancelHide = useCallback(() => {
-    clearTimeout(hideTimer.current)
-    pendingTarget.current = undefined
-  }, [])
-  /**
-   * Retarget the hover (to another block, or to nothing) after a grace period, so the
-   * pointer can travel block -> toolbar even when it crosses a neighbouring block.
-   * Repeated calls for the same target keep the original deadline.
-   */
-  const scheduleHover = useCallback(
-    (id: string | null) => {
-      if (pendingTarget.current === id) return
-      clearTimeout(hideTimer.current)
-      pendingTarget.current = id
-      hideTimer.current = setTimeout(() => {
-        pendingTarget.current = undefined
-        showHover(id)
-      }, HOVER_HIDE_DELAY_MS)
-    },
-    [showHover],
-  )
-  const scheduleHide = useCallback(() => scheduleHover(null), [scheduleHover])
-  /** Hide right now, skipping the grace period. */
-  const hideNow = useCallback(() => {
-    cancelHide()
-    showHover(null)
-  }, [cancelHide, showHover])
-  useEffect(() => () => clearTimeout(hideTimer.current), [])
+  const [openId, setOpenId] = useState<string | null>(null)
+  const closeToolbar = useCallback(() => setOpenId(null), [])
 
   // Bumped whenever suggestions change, so the floating cards re-read editor storage and
   // re-measure against the updated document.
@@ -166,6 +130,8 @@ export function App() {
       }
 
       origins.current.set(blockId, { action, selectionText, history })
+      // The suggestion card takes over from here.
+      setOpenId((current) => (current === blockId ? null : current))
       bump()
     },
     [editor, aiEnabled, docStyle, run, bump],
@@ -306,10 +272,11 @@ export function App() {
     setDocBatch(new Set())
     setDocStyle(null)
     setError(null)
-    hideNow()
+    setHoveredId(null)
+    setOpenId(null)
     // Emits an update, which also clears the stored draft.
     editor.chain().focus().clearContent(true).run()
-  }, [editor, hideNow])
+  }, [editor])
 
   const toggleAi = useCallback(
     (enabled: boolean) => {
@@ -320,30 +287,35 @@ export function App() {
         editor.commands.clearAllSuggestions()
         origins.current.clear()
         setDocBatch(new Set())
-        hideNow()
+        setHoveredId(null)
+        setOpenId(null)
         bump()
       }
     },
-    [editor, bump, hideNow],
+    [editor, bump],
   )
 
   const pending = editor ? [...getSuggestions(editor).keys()] : []
   const batchPending = pending.filter((id) => docBatch.has(id))
   const isBlank = editor?.isEmpty ?? true
 
-  /** The text selected inside the hovered block, if the cursor happens to be in it. */
+  /** The text selected inside the toolbar's block, if the cursor happens to be in it. */
   let selectionText: string | undefined
-  if (editor && hoveredId) {
+  if (editor && openId) {
     const { from, to, empty } = editor.state.selection
-    if (!empty && getBlockIdAt(editor, from) === hoveredId) {
+    if (!empty && getBlockIdAt(editor, from) === openId) {
       selectionText = editor.state.doc.textBetween(from, to, ' ')
     }
   }
 
-  // A block showing accept/reject controls does not also show the hover toolbar.
-  const toolbarBlockId = aiEnabled && hoveredId && !pending.includes(hoveredId) ? hoveredId : null
+  // A block showing accept/reject controls offers neither the toolbar nor its handle.
+  const toolbarBlockId = aiEnabled && openId && !pending.includes(openId) ? openId : null
   const toolbarAnchor =
     editor && toolbarBlockId ? anchorForBlock(editor, toolbarBlockId, paper, 'below') : null
+  const handleBlockId =
+    aiEnabled && hoveredId && hoveredId !== toolbarBlockId && !pending.includes(hoveredId) ? hoveredId : null
+  const handleAnchor =
+    editor && handleBlockId ? anchorForBlock(editor, handleBlockId, paper, 'gutter') : null
 
   return (
     <>
@@ -378,22 +350,21 @@ export function App() {
           ref={setPaper}
           onMouseMove={(event) => {
             if (!editor || !aiEnabled) return
-            const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
-            const id = at ? getBlockIdAt(editor, at.pos) : null
-            if (id && (shownId.current === null || shownId.current === id)) {
-              // Nothing shown yet: show immediately. Same block: keep it alive.
-              cancelHide()
-              showHover(id)
-            } else if (id) {
-              // Another block's toolbar is up: give it the grace period before switching.
-              scheduleHover(id)
-            } else {
-              scheduleHide()
-            }
+            // Between blocks the current one stays targeted, so the handle does not flicker.
+            const id = getBlockIdAtY(editor, event.clientY)
+            if (id) setHoveredId(id)
           }}
-          onMouseLeave={scheduleHide}
+          onMouseLeave={() => setHoveredId(null)}
         >
           <EditorContent editor={editor} />
+
+          {handleBlockId && handleAnchor && (
+            <BlockHandle
+              top={handleAnchor.top}
+              left={handleAnchor.left}
+              onOpen={() => setOpenId(handleBlockId)}
+            />
+          )}
 
           {toolbarBlockId && toolbarAnchor && (
             <BlockToolbar
@@ -405,9 +376,7 @@ export function App() {
               onAction={(action, instruction) =>
                 void runBlockAction(toolbarBlockId, action, instruction, selectionText)
               }
-              onPointerEnter={cancelHide}
-              onPointerLeave={scheduleHide}
-              onDismiss={hideNow}
+              onDismiss={closeToolbar}
             />
           )}
 
@@ -432,7 +401,7 @@ export function App() {
 
         <p className="hint">
           {aiEnabled
-            ? 'Hover a paragraph for AI actions, or select text inside it first to narrow the edit. Proposals appear inline — accept, reject, or refine each one. A whole-document rewrite is accepted or rejected in one go.'
+            ? 'Hover a paragraph and click the pencil for AI actions — select text inside it first to narrow the edit. Esc closes the toolbar. Proposals appear inline — accept, reject, or refine each one. A whole-document rewrite is accepted or rejected in one go.'
             : 'AI is off. This is a plain markdown editor.'}
         </p>
       </main>

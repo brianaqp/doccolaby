@@ -68,13 +68,28 @@ export function listBlocks(editor: Editor): Array<{ blockId: string; text: strin
   return blocks
 }
 
-/** The id of the top-level block containing `pos`, for hover and selection targeting. */
+/** The id of the top-level block containing `pos`, for selection targeting. */
 export function getBlockIdAt(editor: Editor, pos: number): string | null {
   const { doc } = editor.state
   const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)))
   const node = $pos.depth > 0 ? $pos.node(1) : doc.maybeChild($pos.index(0))
   const blockId = node?.attrs.id
   return typeof blockId === 'string' && blockId.length > 0 ? blockId : null
+}
+
+/**
+ * The id of the top-level block spanning the viewport y coordinate `clientY`. Matching on the
+ * vertical band alone (not the exact point) keeps the block targeted while the pointer is in
+ * the page gutter beside it.
+ */
+export function getBlockIdAtY(editor: Editor, clientY: number): string | null {
+  for (const entry of blockEntries(editor)) {
+    const dom = editor.view.nodeDOM(entry.from)
+    if (!(dom instanceof HTMLElement)) continue
+    const { top, bottom } = dom.getBoundingClientRect()
+    if (clientY >= top && clientY <= bottom) return entry.blockId
+  }
+  return null
 }
 
 export function getDocumentMarkdown(editor: Editor): string {

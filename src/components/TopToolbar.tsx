@@ -22,7 +22,7 @@ interface TopToolbarProps {
 }
 
 /**
- * Document-level surface only. Block-level actions live in the hover toolbar and are
+ * Document-level surface only. Block-level actions live in the block toolbar and are
  * deliberately not reachable from here, so a doc-wide rewrite can never be triggered
  * by reaching for a paragraph nudge.
  */
