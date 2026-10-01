@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 
 import type { AiAction, AiActionRequest, RefineTurn, TonePreset } from '../shared/contract'
@@ -11,6 +11,9 @@ import { anchorForBlock } from './components/anchors'
 import { BlockToolbar } from './components/BlockToolbar'
 import { SuggestionCard } from './components/SuggestionCard'
 import { TopToolbar } from './components/TopToolbar'
+
+/** How long the toolbar lingers after the pointer leaves both the block and the toolbar. */
+const HOVER_HIDE_DELAY_MS = 200
 
 /** What produced a block's pending suggestion, so a refine round can re-send the same intent. */
 interface SuggestionOrigin {
@@ -30,6 +33,20 @@ export function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const cancelHide = useCallback(() => clearTimeout(hideTimer.current), [])
+  /** Drop the hover target after a grace period, so the pointer can travel block -> toolbar. */
+  const scheduleHide = useCallback(() => {
+    clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setHoveredId(null), HOVER_HIDE_DELAY_MS)
+  }, [])
+  /** Hide right now, skipping the grace period. */
+  const hideNow = useCallback(() => {
+    clearTimeout(hideTimer.current)
+    setHoveredId(null)
+  }, [])
+  useEffect(() => () => clearTimeout(hideTimer.current), [])
 
   // Bumped whenever suggestions change, so the floating cards re-read editor storage and
   // re-measure against the updated document.
@@ -173,11 +190,11 @@ export function App() {
         // With AI off this is a plain markdown editor — no stray proposals left behind.
         editor.commands.clearAllSuggestions()
         origins.current.clear()
-        setHoveredId(null)
+        hideNow()
         bump()
       }
     },
-    [editor, bump],
+    [editor, bump, hideNow],
   )
 
   const pending = editor ? [...getSuggestions(editor).keys()] : []
@@ -194,7 +211,7 @@ export function App() {
   // A block showing accept/reject controls does not also show the hover toolbar.
   const toolbarBlockId = aiEnabled && hoveredId && !pending.includes(hoveredId) ? hoveredId : null
   const toolbarAnchor =
-    editor && toolbarBlockId ? anchorForBlock(editor, toolbarBlockId, paper) : null
+    editor && toolbarBlockId ? anchorForBlock(editor, toolbarBlockId, paper, 'below') : null
 
   return (
     <>
@@ -213,9 +230,16 @@ export function App() {
           onMouseMove={(event) => {
             if (!editor || !aiEnabled) return
             const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
-            setHoveredId(at ? getBlockIdAt(editor, at.pos) : null)
+            const id = at ? getBlockIdAt(editor, at.pos) : null
+            if (id) {
+              // Show immediately, and keep it alive while the pointer stays on the block.
+              cancelHide()
+              setHoveredId(id)
+            } else {
+              scheduleHide()
+            }
           }}
-          onMouseLeave={() => setHoveredId(null)}
+          onMouseLeave={scheduleHide}
         >
           <EditorContent editor={editor} />
 
@@ -229,7 +253,9 @@ export function App() {
               onAction={(action, instruction) =>
                 void runBlockAction(toolbarBlockId, action, instruction, selectionText)
               }
-              onDismiss={() => setHoveredId(null)}
+              onPointerEnter={cancelHide}
+              onPointerLeave={scheduleHide}
+              onDismiss={hideNow}
             />
           )}
 

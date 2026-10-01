@@ -17,10 +17,13 @@ export interface BlockToolbarProps {
   busy: boolean
   onAction: (action: AiAction, instruction?: string) => void
   onDismiss: () => void
+  /** Pointer entered / left the toolbar itself, so the parent can run its hide timer. */
+  onPointerEnter: () => void
+  onPointerLeave: () => void
 }
 
 /**
- * Floating toolbar pinned to the edge of the hovered block. Always scoped to that block
+ * Floating toolbar pinned below the hovered block. Always scoped to that block
  * (or the active selection inside it) — it never reaches other paragraphs.
  */
 export function BlockToolbar({
@@ -30,6 +33,8 @@ export function BlockToolbar({
   busy,
   onAction,
   onDismiss,
+  onPointerEnter,
+  onPointerLeave,
 }: BlockToolbarProps) {
   const [instruction, setInstruction] = useState('')
 
@@ -44,8 +49,12 @@ export function BlockToolbar({
     <div
       className="block-toolbar"
       style={{ top, left }}
-      // Keep the toolbar alive while the pointer is on it, not just on the block.
-      onMouseEnter={(event) => event.stopPropagation()}
+      // Keep the toolbar alive while the pointer is on it, not just on the block. Moves over
+      // the toolbar must not reach the paper's hit-testing, which would retarget the hover.
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onMouseMove={(event) => event.stopPropagation()}
+      onMouseLeave={(event) => event.stopPropagation()}
     >
       {hasSelection && <span className="scope-chip">selection</span>}
 

@@ -14,6 +14,7 @@ export function anchorForBlock(
   editor: Editor,
   blockId: string,
   container: HTMLElement | null,
+  placement: 'above' | 'below' = 'above',
 ): Anchor | null {
   if (!container) return null
 
@@ -26,6 +27,8 @@ export function anchorForBlock(
   const block = dom.getBoundingClientRect()
   const shell = container.getBoundingClientRect()
 
+  const left = block.left - shell.left
+  if (placement === 'below') return { top: block.bottom - shell.top + 4, left }
   // Float just above the block's top edge.
-  return { top: block.top - shell.top - 38, left: block.left - shell.left }
+  return { top: block.top - shell.top - 38, left }
 }
