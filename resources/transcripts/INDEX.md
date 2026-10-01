@@ -1,0 +1,26 @@
+# doccolaby — Claude Code session transcripts
+
+Sessions in chronological order. Tool inputs/results are truncated; thinking blocks and subagent sidechains are omitted.
+
+01. [2026-10-01T05:52 — Assessment tech stack and project plan](01-651b1275-0fc1-4041-a14c-f6a18cf52e85.md)
+02. [2026-10-01T06:03 — Tiptap features plan](02-70715ad1-61c1-4906-bb87-edde7420f9d9.md)
+03. [2026-10-01T06:21 — plan.md review](03-a1046e85-25e2-427a-a940-9be55830e3a2.md)
+04. [2026-10-01T06:21 — Git repo initialization with vite and React](04-89d0130a-cca3-444b-b61f-f873e08fd3a6.md)
+05. [2026-10-01T06:23 — (untitled)](05-bfd3c048-af67-490d-8b7f-479cbde8a016.md)
+06. [2026-10-01T06:29 — App design and AI features](06-28550d29-fae0-4905-8aec-1f67640e58d4.md)
+07. [2026-10-01T06:40 — Developer agent for plan.md](07-ac21f12c-3015-4ae0-bffc-9ff96093b0a4.md)
+08. [2026-10-01T07:13 — App architecture overview](08-f70e3d11-eddc-475c-87f9-050118f44608.md)
+09. [2026-10-01T07:20 — Hover information component](09-6a41e3b4-50a2-4ffb-951b-09a6f9406934.md)
+10. [2026-10-01T07:20 — UI framework](10-67a4c4bd-b211-4ea8-9602-4d5f4db380ec.md)
+11. [2026-10-01T07:32 — Doc complete changes approval workflow](11-827e63f4-41fe-4289-8fcb-4270d55517bc.md)
+12. [2026-10-01T07:36 — Toolbar timer for block changes](12-b40c03c3-7f78-4537-a631-4750157ae8a6.md)
+13. [2026-10-01T01:02 — Blank page with localStorage and clear button](13-404d2fe6-3561-48c5-a002-7b2a8f55913a.md)
+14. [2026-10-01T01:07 — Server hostname env variable](14-4502d0a7-99a4-4be7-b1c4-024b8abb6c47.md)
+15. [2026-10-01T01:12 — Production readiness setup](15-1fe0206f-2553-4b93-8add-8f2524baf0c0.md)
+16. [2026-10-01T01:13 — Bind Esc key to quit toolbar](16-49a773fc-dc44-4834-af5c-a511c86b642f.md)
+17. [2026-10-01T02:00 — Toolbar hover system removal](17-2f48a13a-c15d-4caa-b6b0-6b282e8cad2a.md)
+18. [2026-10-01T02:04 — Prompt modification for heading blocks](18-03b1af95-4627-4360-9dbe-a22964a6bae9.md)
+19. [2026-10-01T02:05 — Add general changes input at doc level](19-f8e123be-d211-4d52-a467-ac8605fe2e0f.md)
+20. [2026-10-01T02:09 — (untitled)](20-57a13944-d9ff-4948-8b91-92f31f5ebde4.md)
+21. [2026-10-01T02:09 — Markdown API node selection](21-88d1eeeb-a212-4787-84e9-e967091910f4.md)
+22. [2026-10-01T02:17 — Readme update](22-0ca1045c-a64d-40de-9dca-4b45fd06fc5f.md)

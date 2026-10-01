@@ -174,4 +174,7 @@ Every call logs its token usage to the proxy's stdout, so spend is visible while
 
 - Code: this repo.
 - README: this file.
-- AI session transcript: `transcript.md` — exported from the Claude Code session that built this.
+- AI session transcripts: [`resources/transcripts/`](resources/transcripts/) — all 22 Claude Code
+  sessions that built this, exported to Markdown. Start with
+  [`ALL_SESSIONS.md`](resources/transcripts/ALL_SESSIONS.md) (everything in one file) or
+  [`INDEX.md`](resources/transcripts/INDEX.md) (the list of sessions, linking to one file each).
