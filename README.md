@@ -33,6 +33,22 @@ environment — it is never read as a `VITE_*` variable, so it never reaches the
 | `PORT` | `8787` | proxy port |
 | `HOST` | `localhost` | proxy bind address; `0.0.0.0` exposes it on all interfaces |
 
+## Personal comments
+
+I made this demo in a four hour window sprint, seeking the best effort result without overengineering it. 
+My idea was to empower how a Markdown editor is, helping the user to just write it better.
+
+First of all was to select how AI was gonna interact with the system. First I think in a MCP based: manage the tool_loop,
+and manage the lifecycle but that's probably overengineering right now, so I got more inclined to structured_outputs to dyanmically perform the actions.
+
+The user should always have control over what's happening. That's why I added the diff and the approve/reject system, which is secure by default. It's quite funny, because in the end the AI agent only has to reference which block was changed, and that's quite simple. But what if we add document management tools? More serious stuff, like managing other Markdown files, or elevating our app to create more complex elements where AI actions should be restricted but useful? With this system, my intent was to showcase the general mechanism. Obviously, thinking out loud, I would also like to build a chat-based system to manage my whole list of documents and help me retrieve, add and delete them. But that's totally out of the equation right now. I scoped this project to use 20% of the actions to generate 80% of the results.
+
+Then I focused on two different endpoints: one for creating and managing blocks, and another for creating structured starts. The idea is to have different starting points from which we can create with AI.
+
+Later I moved on to polish actions, like setting the tone, rewriting the whole doc with specific inputs, and selecting multiple paragraphs to tell the AI which specific changes I want to perform.
+
+To sum up, I kept the scope to: the user writes Markdown, the AI suggests changes as visible diffs, and the user accepts, rejects or refines them. 
+
 ## What was built
 
 **Two AI surfaces, deliberately kept apart.**
