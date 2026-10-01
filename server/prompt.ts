@@ -54,9 +54,17 @@ function systemPrompt(req: AiActionRequest): string {
     req.scope === 'block'
       ? 'This request is block-scoped: exactly one block may change, and targets must contain that one block.'
       : [
-          'This request is document-scoped: the user asked for the whole document to be recast, so this is not a request to find the one weakest paragraph.',
-          'Return one targets entry for every block whose wording should change. For a tone change that is normally most of the prose blocks, not one of them.',
-          'Omit a block only when recasting it genuinely cannot serve the request — a bare heading that already fits, or a code block.',
+          ...(req.action === 'set_tone'
+            ? [
+                'This request is document-scoped: the user asked for the whole document to be recast, so this is not a request to find the one weakest paragraph.',
+                'Return one targets entry for every block whose wording should change. For a tone change that is normally most of the prose blocks, not one of them.',
+                'Omit a block only when recasting it genuinely cannot serve the request — a bare heading that already fits, or a code block.',
+              ]
+            : [
+                'This request is document-scoped: the USER INSTRUCTION is a change to the document as a whole, so apply it everywhere it is relevant, not just to the first or weakest block.',
+                'Return one targets entry for every block the instruction affects, and omit every block it does not. Do not polish blocks the instruction does not ask about.',
+                'To remove a block the instruction asks to remove, return it with content set to an empty string (""). Removing a heading is allowed only when its whole section is being removed.',
+              ]),
           '',
           'Heading blocks (lines starting with #) are labels, not prose. Treat them with restraint:',
           'Limits:',
@@ -69,7 +77,7 @@ function systemPrompt(req: AiActionRequest): string {
           'What not to do:',
           '- Never turn a heading into a sentence, a question or a paragraph, and never add body text to a heading block.',
           '- Never add trailing punctuation, emoji, bold/italic markup or numbering a heading did not already have.',
-          '- Never change a heading\'s level, merge it with the next block, split it, add new headings or delete existing ones.',
+          '- Never change a heading\'s level, merge it with the next block, split it, add new headings or delete existing ones — unless the user instruction explicitly removes that heading\'s whole section.',
         ].join('\n'),
   )
 

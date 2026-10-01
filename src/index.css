@@ -84,6 +84,30 @@ button:disabled {
   color: var(--insert-ink);
 }
 
+.doc-instruction {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.doc-instruction input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 9px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.doc-instruction input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .clear-button {
   margin-left: auto;
 }

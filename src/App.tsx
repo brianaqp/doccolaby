@@ -138,22 +138,23 @@ export function App() {
   )
 
   /**
-   * Document-scoped tone rewrite. The response is fanned out into one independent per-block
+   * Document-scoped rewrite. The response is fanned out into one independent per-block
    * suggestion, so the user still reviews the document paragraph by paragraph instead of
-   * accepting one opaque replacement.
+   * accepting one opaque replacement. `tone` is set by the tone presets and remembered as the
+   * document's style; a free-form instruction leaves the established style alone.
    */
-  const runDocTone = useCallback(
-    async (tone: TonePreset) => {
+  const runDocAction = useCallback(
+    async (label: string, action: AiAction, instruction: string, tone?: TonePreset) => {
       if (!editor || !aiEnabled) return
 
       const blocks = listBlocks(editor)
       if (!blocks.length) return
 
-      const response = await run(`rewrite the document as ${tone}`, () =>
+      const response = await run(label, () =>
         requestAiAction({
           scope: 'doc',
-          action: 'set_tone',
-          instruction: `Rewrite the document in a ${tone} tone.`,
+          action,
+          instruction,
           fullDocumentContext: getDocumentMarkdown(editor),
           docStyleContext: docStyle,
           blocks,
@@ -167,7 +168,7 @@ export function App() {
       for (const target of response.targets) {
         if (!known.has(target.blockId)) continue
         if (!editor.commands.setSuggestion(target.blockId, target.content)) continue
-        origins.current.set(target.blockId, { action: 'set_tone', history: [] })
+        origins.current.set(target.blockId, { action, history: [] })
         batch.add(target.blockId)
         applied += 1
       }
@@ -175,11 +176,24 @@ export function App() {
       setDocBatch(batch)
 
       // The tone is remembered even if nothing changed, so later block edits stay consistent.
-      setDocStyle(tone)
-      if (applied === 0) setError(`The AI thought the document already read as ${tone}.`)
+      if (tone) setDocStyle(tone)
+      if (applied === 0) {
+        setError(tone ? `The AI thought the document already read as ${tone}.` : 'The AI found nothing to change.')
+      }
       bump()
     },
     [editor, aiEnabled, docStyle, run, bump],
+  )
+
+  const runDocTone = useCallback(
+    (tone: TonePreset) =>
+      runDocAction(`rewrite the document as ${tone}`, 'set_tone', `Rewrite the document in a ${tone} tone.`, tone),
+    [runDocAction],
+  )
+
+  const runDocInstruction = useCallback(
+    (instruction: string) => runDocAction('change the document', 'rewrite', instruction),
+    [runDocAction],
   )
 
   const accept = useCallback(
@@ -324,6 +338,7 @@ export function App() {
         onToggleAi={toggleAi}
         docStyle={docStyle}
         onToneRewrite={runDocTone}
+        onDocInstruction={runDocInstruction}
         busy={busy !== null}
         canClear={!isBlank || pending.length > 0}
         onClear={clearDocument}
@@ -401,7 +416,7 @@ export function App() {
 
         <p className="hint">
           {aiEnabled
-            ? 'Hover a paragraph and click the pencil for AI actions — select text inside it first to narrow the edit. Esc closes the toolbar. Proposals appear inline — accept, reject, or refine each one. A whole-document rewrite is accepted or rejected in one go.'
+            ? 'Hover a paragraph and click the pencil for AI actions — select text inside it first to narrow the edit. Esc closes the toolbar. Proposals appear inline — accept, reject, or refine each one. Ask for document-wide changes from the top bar; a whole-document rewrite is accepted or rejected in one go.'
             : 'AI is off. This is a plain markdown editor.'}
         </p>
       </main>
