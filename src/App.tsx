@@ -6,7 +6,7 @@ import type { AiAction, RefineTurn, TonePreset } from '../shared/contract/aiActi
 import { structureToMarkdown } from '../shared/contract/structure'
 import { requestAiAction, requestStructure } from './ai/client'
 import { editorExtensions } from './editor/extensions'
-import { blockEntries, getBlockIdAt, getBlockIdAtY, getBlockMarkdown, getDocumentMarkdown, listBlocks } from './editor/blocks'
+import { blockEntries, getBlockIdAtY, getBlockMarkdown, getDocumentMarkdown, getSelectedBlockIds, listBlocks } from './editor/blocks'
 import { loadDraft, saveDraft } from './editor/draftStorage'
 import { getSuggestion, getSuggestions } from './editor/SuggestionDecorations'
 import { acceptSuggestion, rejectSuggestion } from './editor/applySuggestion'
@@ -30,6 +30,18 @@ interface SuggestionOrigin {
   history: RefineTurn[]
 }
 
+/** What an open toolbar acts on, captured when it opens. */
+interface ToolbarTarget {
+  /** One block (a single paragraph edit) or several (sent together as a selection). */
+  blockIds: string[]
+  /** Text selected inside the single target block, which narrows the edit to that span. */
+  selectionText?: string
+}
+
+function sameBlocks(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i])
+}
+
 export function App() {
   // Held in state, not a ref: the floating surfaces are positioned from this element's box,
   // so mounting it has to trigger a render or the first measurement has nothing to measure.
@@ -43,11 +55,12 @@ export function App() {
   const [docStyle, setDocStyle] = useState<TonePreset | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // The block under the pointer shows a pencil handle; clicking it opens that block's toolbar,
-  // which then stays put until Escape or its close button — hovering elsewhere never hides it.
+  // The selected blocks — or, with nothing selected, the block under the pointer — show a pencil
+  // handle; clicking it opens a toolbar for those blocks, which then stays put until Escape or its
+  // close button — hovering or selecting elsewhere never hides it.
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
-  const closeToolbar = useCallback(() => setOpenId(null), [])
+  const [openTarget, setOpenTarget] = useState<ToolbarTarget | null>(null)
+  const closeToolbar = useCallback(() => setOpenTarget(null), [])
 
   // Bumped whenever suggestions change, so the floating cards re-read editor storage and
   // re-measure against the updated document.
@@ -87,6 +100,11 @@ export function App() {
       clearTimeout(saveTimer.current)
     }
   }, [editor])
+
+  // While the toolbar is open, its blocks stay highlighted even after focus moves to its input.
+  useEffect(() => {
+    editor?.commands.pinSelectedBlocks(openTarget?.blockIds ?? [])
+  }, [editor, openTarget])
 
   const run = useCallback(async <T,>(label: string, request: () => Promise<T>) => {
     setError(null)
@@ -131,7 +149,52 @@ export function App() {
 
       origins.current.set(blockId, { action, selectionText, history })
       // The suggestion card takes over from here.
-      setOpenId((current) => (current === blockId ? null : current))
+      setOpenTarget((current) => (current?.blockIds.includes(blockId) ? null : current))
+      bump()
+    },
+    [editor, aiEnabled, docStyle, run, bump],
+  )
+
+  /**
+   * Selection-scoped: every selected block is sent in one request, so the model can edit them as
+   * one passage. Each returned block still gets its own suggestion, reviewed independently.
+   */
+  const runSelectionAction = useCallback(
+    async (blockIds: string[], action: AiAction, instruction?: string) => {
+      if (!editor || !aiEnabled) return
+
+      const blocks = blockIds
+        .map((blockId) => ({ blockId, text: getBlockMarkdown(editor, blockId) }))
+        .filter((block) => block.text.length > 0)
+      if (!blocks.length) return
+
+      const response = await run(`${action.replace('_', ' ')} the selection`, () =>
+        requestAiAction({
+          scope: 'selection',
+          action,
+          instruction,
+          fullDocumentContext: getDocumentMarkdown(editor),
+          docStyleContext: docStyle,
+          blocks,
+        }),
+      )
+      if (!response) return
+
+      const targeted = new Set(blocks.map((block) => block.blockId))
+      let applied = 0
+      for (const target of response.targets) {
+        if (!targeted.has(target.blockId)) continue
+        if (!editor.commands.setSuggestion(target.blockId, target.content)) continue
+        origins.current.set(target.blockId, { action, history: [] })
+        applied += 1
+      }
+      if (applied === 0) {
+        setError('The AI decided the selection was already fine.')
+        return
+      }
+
+      // The suggestion cards take over from here.
+      setOpenTarget(null)
       bump()
     },
     [editor, aiEnabled, docStyle, run, bump],
@@ -287,7 +350,7 @@ export function App() {
     setDocStyle(null)
     setError(null)
     setHoveredId(null)
-    setOpenId(null)
+    setOpenTarget(null)
     // Emits an update, which also clears the stored draft.
     editor.chain().focus().clearContent(true).run()
   }, [editor])
@@ -302,7 +365,7 @@ export function App() {
         origins.current.clear()
         setDocBatch(new Set())
         setHoveredId(null)
-        setOpenId(null)
+        setOpenTarget(null)
         bump()
       }
     },
@@ -313,23 +376,30 @@ export function App() {
   const batchPending = pending.filter((id) => docBatch.has(id))
   const isBlank = editor?.isEmpty ?? true
 
-  /** The text selected inside the toolbar's block, if the cursor happens to be in it. */
-  let selectionText: string | undefined
-  if (editor && openId) {
-    const { from, to, empty } = editor.state.selection
-    if (!empty && getBlockIdAt(editor, from) === openId) {
-      selectionText = editor.state.doc.textBetween(from, to, ' ')
-    }
-  }
+  // A block showing accept/reject controls is never targeted by the toolbar or its handle.
+  const targetable = (id: string) => !pending.includes(id)
+  const selectedIds = editor && aiEnabled ? getSelectedBlockIds(editor.state).filter(targetable) : []
 
-  // A block showing accept/reject controls offers neither the toolbar nor its handle.
-  const toolbarBlockId = aiEnabled && openId && !pending.includes(openId) ? openId : null
+  const toolbarIds = aiEnabled && openTarget ? openTarget.blockIds.filter(targetable) : []
+  // Below the last target block, so it never covers the text being edited.
   const toolbarAnchor =
-    editor && toolbarBlockId ? anchorForBlock(editor, toolbarBlockId, paper, 'below') : null
-  const handleBlockId =
-    aiEnabled && hoveredId && hoveredId !== toolbarBlockId && !pending.includes(hoveredId) ? hoveredId : null
-  const handleAnchor =
-    editor && handleBlockId ? anchorForBlock(editor, handleBlockId, paper, 'gutter') : null
+    editor && toolbarIds.length > 0 ? anchorForBlock(editor, toolbarIds[toolbarIds.length - 1], paper, 'below') : null
+
+  // A selection claims the pencil wherever the pointer is; otherwise it follows the hover.
+  const hoverIds = aiEnabled && hoveredId && targetable(hoveredId) ? [hoveredId] : []
+  const candidateIds = selectedIds.length > 0 ? selectedIds : hoverIds
+  const handleIds = sameBlocks(candidateIds, toolbarIds) ? [] : candidateIds
+  const handleAnchor = editor && handleIds.length > 0 ? anchorForBlock(editor, handleIds[0], paper, 'gutter') : null
+
+  const openToolbar = () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    setOpenTarget({
+      blockIds: handleIds,
+      // A span inside one block narrows the edit; a multi-block selection sends whole blocks.
+      selectionText: selectedIds.length === 1 ? editor.state.doc.textBetween(from, to, ' ') : undefined,
+    })
+  }
 
   return (
     <>
@@ -361,7 +431,7 @@ export function App() {
         )}
 
         <div
-          className="paper"
+          className={`paper${aiEnabled ? ' ai-on' : ''}`}
           ref={setPaper}
           onMouseMove={(event) => {
             if (!editor || !aiEnabled) return
@@ -373,23 +443,26 @@ export function App() {
         >
           <EditorContent editor={editor} />
 
-          {handleBlockId && handleAnchor && (
+          {handleAnchor && (
             <BlockHandle
               top={handleAnchor.top}
               left={handleAnchor.left}
-              onOpen={() => setOpenId(handleBlockId)}
+              blockCount={handleIds.length}
+              onOpen={openToolbar}
             />
           )}
 
-          {toolbarBlockId && toolbarAnchor && (
+          {openTarget && toolbarAnchor && (
             <BlockToolbar
-              key={toolbarBlockId}
+              key={toolbarIds.join(' ')}
               top={toolbarAnchor.top}
               left={toolbarAnchor.left}
-              hasSelection={selectionText !== undefined}
+              blockCount={toolbarIds.length}
               busy={busy !== null}
               onAction={(action, instruction) =>
-                void runBlockAction(toolbarBlockId, action, instruction, selectionText)
+                void (toolbarIds.length === 1
+                  ? runBlockAction(toolbarIds[0], action, instruction, openTarget.selectionText)
+                  : runSelectionAction(toolbarIds, action, instruction))
               }
               onDismiss={closeToolbar}
             />
@@ -416,7 +489,7 @@ export function App() {
 
         <p className="hint">
           {aiEnabled
-            ? 'Hover a paragraph and click the pencil for AI actions — select text inside it first to narrow the edit. Esc closes the toolbar. Proposals appear inline — accept, reject, or refine each one. Ask for document-wide changes from the top bar; a whole-document rewrite is accepted or rejected in one go.'
+            ? 'Hover a paragraph and click the pencil for AI actions. Select text to target it instead: inside one paragraph it narrows the edit, across several it sends every highlighted block together. Esc closes the toolbar. Proposals appear inline — accept, reject, or refine each one. Ask for document-wide changes from the top bar; a whole-document rewrite is accepted or rejected in one go.'
             : 'AI is off. This is a plain markdown editor.'}
         </p>
       </main>

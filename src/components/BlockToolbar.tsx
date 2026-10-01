@@ -12,8 +12,8 @@ export interface BlockToolbarProps {
   /** Screen-space anchor of the target block, relative to the editor shell. */
   top: number
   left: number
-  /** True when the user has text selected inside this block. */
-  hasSelection: boolean
+  /** How many blocks the actions go to. They are highlighted in the editor, not listed here. */
+  blockCount: number
   busy: boolean
   onAction: (action: AiAction, instruction?: string) => void
   /** Escape or the close button. */
@@ -21,11 +21,11 @@ export interface BlockToolbarProps {
 }
 
 /**
- * Floating toolbar pinned below a block, opened from that block's pencil handle. Always scoped
- * to that block (or the active selection inside it) — it never reaches other paragraphs. It stays
- * open until explicitly closed, so moving the pointer around the page never hides it.
+ * Floating toolbar pinned below its target, opened from the pencil handle. Always scoped to the
+ * highlighted blocks (or the span selected inside a single one) — it never reaches other
+ * paragraphs. It stays open until explicitly closed, so moving the pointer never hides it.
  */
-export function BlockToolbar({ top, left, hasSelection, busy, onAction, onDismiss }: BlockToolbarProps) {
+export function BlockToolbar({ top, left, blockCount, busy, onAction, onDismiss }: BlockToolbarProps) {
   const [instruction, setInstruction] = useState('')
 
   // Escape closes the toolbar wherever focus is — the instruction input or the editor itself.
@@ -48,13 +48,11 @@ export function BlockToolbar({ top, left, hasSelection, busy, onAction, onDismis
 
   return (
     <div className="block-toolbar" style={{ top, left }}>
-      {hasSelection && <span className="scope-chip">selection</span>}
-
       {QUICK_ACTIONS.map(({ action, label, title }) => (
         <button
           key={action}
           type="button"
-          title={title}
+          title={blockCount > 1 ? `${title} — all ${blockCount} highlighted blocks` : title}
           disabled={busy}
           onClick={() => onAction(action)}
         >

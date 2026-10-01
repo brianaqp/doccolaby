@@ -19,8 +19,11 @@ export const TONE_PRESETS = ['formal', 'casual', 'concise', 'persuasive', 'frien
 
 export const aiActionSchema = z.enum(AI_ACTIONS)
 
-/** Block-scoped actions nudge one paragraph. Doc-scoped actions rewrite the whole document. */
-export const aiScopeSchema = z.enum(['block', 'doc'])
+/**
+ * Block-scoped actions nudge one paragraph. Selection-scoped actions edit exactly the blocks the
+ * user selected. Doc-scoped actions rewrite the whole document.
+ */
+export const aiScopeSchema = z.enum(['block', 'selection', 'doc'])
 
 export const tonePresetSchema = z.enum(TONE_PRESETS)
 
@@ -51,7 +54,7 @@ export const aiActionRequestSchema = z
     docStyleContext: tonePresetSchema.nullish(),
     /** Prior proposal/instruction rounds for this block, oldest first. Enables multi-turn refine. */
     history: z.array(refineTurnSchema).optional(),
-    /** Present for `scope: 'doc'`: every block the model may rewrite. */
+    /** Present for `scope: 'selection'` and `scope: 'doc'`: every block the model may rewrite. */
     blocks: z.array(z.object({ blockId: z.string().min(1), text: z.string() })).optional(),
   })
   // The scope decides which fields are mandatory, so the shape is refined rather than split
@@ -60,9 +63,9 @@ export const aiActionRequestSchema = z
     path: ['blockId'],
     message: "`blockId` is required when scope is 'block'.",
   })
-  .refine((req) => req.scope !== 'doc' || (req.blocks?.length ?? 0) > 0, {
+  .refine((req) => req.scope === 'block' || (req.blocks?.length ?? 0) > 0, {
     path: ['blocks'],
-    message: "`blocks` must be a non-empty array when scope is 'doc'.",
+    message: "`blocks` must be a non-empty array when scope is 'selection' or 'doc'.",
   })
 
 /** One proposed replacement. `content: ''` means "delete this block". */

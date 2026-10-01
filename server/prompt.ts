@@ -49,40 +49,54 @@ function systemPrompt(req: AiActionRequest): string {
     lines.push(`- ${ACTION_GUIDANCE[action]}`)
   }
 
-  lines.push(
-    '',
-    req.scope === 'block'
-      ? 'This request is block-scoped: exactly one block may change, and targets must contain that one block.'
-      : [
-          ...(req.action === 'set_tone'
-            ? [
-                'This request is document-scoped: the user asked for the whole document to be recast, so this is not a request to find the one weakest paragraph.',
-                'Return one targets entry for every block whose wording should change. For a tone change that is normally most of the prose blocks, not one of them.',
-                'Omit a block only when recasting it genuinely cannot serve the request — a bare heading that already fits, or a code block.',
-              ]
-            : [
-                'This request is document-scoped: the USER INSTRUCTION is a change to the document as a whole, so apply it everywhere it is relevant, not just to the first or weakest block.',
-                'Return one targets entry for every block the instruction affects, and omit every block it does not. Do not polish blocks the instruction does not ask about.',
-                'To remove a block the instruction asks to remove, return it with content set to an empty string (""). Removing a heading is allowed only when its whole section is being removed.',
-              ]),
-          '',
-          'Heading blocks (lines starting with #) are labels, not prose. Treat them with restraint:',
-          'Limits:',
-          '- A heading stays one line, with exactly the same number of # marks it started with.',
-          '- Keep it short: no longer than the original heading plus about three words, and never more than ten words.',
-          'What to do:',
-          '- Leave a heading unchanged unless its wording clearly clashes with the request, and omit it from targets when unchanged.',
-          '- When you do change one, adjust word choice only, so it still names the same topic as the section beneath it.',
-          '- Keep the existing capitalisation style (Title Case or sentence case) consistent with the other headings.',
-          'What not to do:',
-          '- Never turn a heading into a sentence, a question or a paragraph, and never add body text to a heading block.',
-          '- Never add trailing punctuation, emoji, bold/italic markup or numbering a heading did not already have.',
-          '- Never change a heading\'s level, merge it with the next block, split it, add new headings or delete existing ones — unless the user instruction explicitly removes that heading\'s whole section.',
-        ].join('\n'),
-  )
+  lines.push('', scopeRules(req))
 
   return lines.join('\n')
 }
+
+function scopeRules(req: AiActionRequest): string {
+  if (req.scope === 'block') {
+    return 'This request is block-scoped: exactly one block may change, and targets must contain that one block.'
+  }
+
+  const scope =
+    req.scope === 'selection'
+      ? [
+          'This request is selection-scoped: the user selected the TARGET BLOCKS and wants the action applied to them as a group.',
+          'Apply the action (and the USER INSTRUCTION, if any) to every target block it is relevant to, so the selected passage reads as one coherent piece.',
+          'Only the target blocks may change. Return one targets entry per block you changed and omit the rest.',
+          'To remove a target block, return it with content set to an empty string (""). Removing a heading is allowed only when its whole section is being removed.',
+        ]
+      : req.action === 'set_tone'
+        ? [
+            'This request is document-scoped: the user asked for the whole document to be recast, so this is not a request to find the one weakest paragraph.',
+            'Return one targets entry for every block whose wording should change. For a tone change that is normally most of the prose blocks, not one of them.',
+            'Omit a block only when recasting it genuinely cannot serve the request — a bare heading that already fits, or a code block.',
+          ]
+        : [
+            'This request is document-scoped: the USER INSTRUCTION is a change to the document as a whole, so apply it everywhere it is relevant, not just to the first or weakest block.',
+            'Return one targets entry for every block the instruction affects, and omit every block it does not. Do not polish blocks the instruction does not ask about.',
+            'To remove a block the instruction asks to remove, return it with content set to an empty string (""). Removing a heading is allowed only when its whole section is being removed.',
+          ]
+
+  return [...scope, '', ...HEADING_RULES].join('\n')
+}
+
+/** Multi-block requests can reach headings, which the model otherwise tends to over-edit. */
+const HEADING_RULES = [
+  'Heading blocks (lines starting with #) are labels, not prose. Treat them with restraint:',
+  'Limits:',
+  '- A heading stays one line, with exactly the same number of # marks it started with.',
+  '- Keep it short: no longer than the original heading plus about three words, and never more than ten words.',
+  'What to do:',
+  '- Leave a heading unchanged unless its wording clearly clashes with the request, and omit it from targets when unchanged.',
+  '- When you do change one, adjust word choice only, so it still names the same topic as the section beneath it.',
+  '- Keep the existing capitalisation style (Title Case or sentence case) consistent with the other headings.',
+  'What not to do:',
+  '- Never turn a heading into a sentence, a question or a paragraph, and never add body text to a heading block.',
+  '- Never add trailing punctuation, emoji, bold/italic markup or numbering a heading did not already have.',
+  '- Never change a heading\'s level, merge it with the next block, split it, add new headings or delete existing ones — unless the user instruction explicitly removes that heading\'s whole section.',
+]
 
 function userPrompt(req: AiActionRequest): string {
   const sections: string[] = [

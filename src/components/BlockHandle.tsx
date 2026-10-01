@@ -2,19 +2,25 @@ export interface BlockHandleProps {
   /** Screen-space anchor in the gutter beside the hovered block, relative to the editor shell. */
   top: number
   left: number
+  /** How many blocks the toolbar will act on: the selected ones, or just the hovered one. */
+  blockCount: number
   onOpen: () => void
 }
 
-/** Pencil shown in the left gutter of the hovered block; clicking it opens the block's toolbar. */
-export function BlockHandle({ top, left, onOpen }: BlockHandleProps) {
+/**
+ * Pencil shown in the left gutter of the first selected block, or of the hovered block when
+ * nothing is selected; clicking it opens the toolbar for those blocks.
+ */
+export function BlockHandle({ top, left, blockCount, onOpen }: BlockHandleProps) {
+  const label = blockCount > 1 ? `AI actions for ${blockCount} blocks` : 'AI actions for this paragraph'
   return (
     <button
       type="button"
       className="block-handle"
       style={{ top, left }}
-      title="AI actions for this paragraph"
-      aria-label="AI actions for this paragraph"
-      // Keep the editor's selection: a selection inside the block narrows the action.
+      title={label}
+      aria-label={label}
+      // Keep the editor's selection: it decides which blocks the toolbar targets.
       onMouseDown={(event) => event.preventDefault()}
       onClick={onOpen}
     >

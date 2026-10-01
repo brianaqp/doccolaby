@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core'
 import type { Node as PMNode } from '@tiptap/pm/model'
+import type { EditorState } from '@tiptap/pm/state'
 
 export interface BlockRange {
   /** Position directly before the block node. */
@@ -75,6 +76,27 @@ export function getBlockIdAt(editor: Editor, pos: number): string | null {
   const node = $pos.depth > 0 ? $pos.node(1) : doc.maybeChild($pos.index(0))
   const blockId = node?.attrs.id
   return typeof blockId === 'string' && blockId.length > 0 ? blockId : null
+}
+
+/**
+ * Ids of every top-level block a non-empty selection touches, in document order. A collapsed
+ * cursor selects nothing, so it returns an empty list.
+ */
+export function getSelectedBlockIds(state: EditorState): string[] {
+  const { doc, selection } = state
+  if (selection.empty) return []
+
+  const ids: string[] = []
+  doc.forEach((node, offset) => {
+    const blockId = node.attrs.id
+    if (typeof blockId !== 'string' || blockId.length === 0) return
+    // Compared against the block's content, strictly: a selection that only reaches a block's
+    // edge (a triple-click ends at the next block's start) has not selected anything in it.
+    const contentFrom = offset + 1
+    const contentTo = offset + node.nodeSize - 1
+    if (selection.from < contentTo && selection.to > contentFrom) ids.push(blockId)
+  })
+  return ids
 }
 
 /**
