@@ -84,11 +84,14 @@ button:disabled {
   color: var(--insert-ink);
 }
 
+.clear-button {
+  margin-left: auto;
+}
+
 .ai-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   cursor: pointer;
   user-select: none;
 }
@@ -100,6 +103,38 @@ button:disabled {
   max-width: 760px;
   margin: 28px auto 140px;
   padding: 0 20px;
+}
+
+/* ---------- blank-page structure prompt ---------- */
+
+.structure-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.structure-row {
+  display: flex;
+  gap: 8px;
+}
+
+.structure-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.structure-row input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .paper {

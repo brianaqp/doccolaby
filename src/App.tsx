@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 
-import type { AiAction, AiActionRequest, RefineTurn, TonePreset } from '../shared/contract'
-import { requestAiAction } from './ai/client'
-import { editorExtensions, STARTER_DOC } from './editor/extensions'
-import { getBlockIdAt, getBlockMarkdown, getDocumentMarkdown, listBlocks } from './editor/blocks'
+import type { AiAction, RefineTurn, TonePreset } from '../shared/contract/aiAction'
+import { structureToMarkdown } from '../shared/contract/structure'
+import { requestAiAction, requestStructure } from './ai/client'
+import { editorExtensions } from './editor/extensions'
+import { blockEntries, getBlockIdAt, getBlockMarkdown, getDocumentMarkdown, listBlocks } from './editor/blocks'
+import { loadDraft, saveDraft } from './editor/draftStorage'
 import { getSuggestion, getSuggestions } from './editor/SuggestionDecorations'
 import { acceptSuggestion, rejectSuggestion } from './editor/applySuggestion'
 import { anchorForBlock } from './components/anchors'
@@ -14,8 +16,14 @@ import { DocReviewBar } from './components/DocReviewBar'
 import { SuggestionCard } from './components/SuggestionCard'
 import { TopToolbar } from './components/TopToolbar'
 
+// Only needed on a blank page, so it stays out of the main bundle.
+const StructurePrompt = lazy(() => import('./components/StructurePrompt'))
+
 /** How long the toolbar lingers after the pointer leaves both the block and the toolbar. */
 const HOVER_HIDE_DELAY_MS = 200
+
+/** Typing settles for this long before the draft is written to localStorage. */
+const SAVE_DELAY_MS = 400
 
 /** What produced a block's pending suggestion, so a refine round can re-send the same intent. */
 interface SuggestionOrigin {
@@ -82,19 +90,45 @@ export function App() {
   const [, setRevision] = useState(0)
   const bump = useCallback(() => setRevision((n) => n + 1), [])
 
+  // Lazy initializer: storage is read once on mount, not on every render.
+  const [initialDraft] = useState(loadDraft)
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const scheduleSave = useCallback((editor: Editor) => {
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => saveDraft(getDocumentMarkdown(editor)), SAVE_DELAY_MS)
+  }, [])
+
   const editor = useEditor({
     extensions: editorExtensions,
-    content: STARTER_DOC,
+    content: initialDraft,
     contentType: 'markdown',
     onSelectionUpdate: bump,
-    onUpdate: bump,
+    onUpdate: ({ editor }) => {
+      scheduleSave(editor)
+      bump()
+    },
   })
 
-  const run = useCallback(async (label: string, body: AiActionRequest) => {
+  // A reload or tab close inside the debounce window would otherwise lose the last keystrokes.
+  useEffect(() => {
+    if (!editor) return
+    const flush = () => {
+      clearTimeout(saveTimer.current)
+      saveDraft(getDocumentMarkdown(editor))
+    }
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      clearTimeout(saveTimer.current)
+    }
+  }, [editor])
+
+  const run = useCallback(async <T,>(label: string, request: () => Promise<T>) => {
     setError(null)
     setBusy(label)
     try {
-      return await requestAiAction(body)
+      return await request()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       return null
@@ -110,17 +144,19 @@ export function App() {
 
       const history = origins.current.get(blockId)?.history ?? []
 
-      const response = await run(action.replace('_', ' '), {
-        scope: 'block',
-        action,
-        blockId,
-        blockText: getBlockMarkdown(editor, blockId),
-        selectionText,
-        instruction,
-        fullDocumentContext: getDocumentMarkdown(editor),
-        docStyleContext: docStyle,
-        history: history.length ? history : undefined,
-      })
+      const response = await run(action.replace('_', ' '), () =>
+        requestAiAction({
+          scope: 'block',
+          action,
+          blockId,
+          blockText: getBlockMarkdown(editor, blockId),
+          selectionText,
+          instruction,
+          fullDocumentContext: getDocumentMarkdown(editor),
+          docStyleContext: docStyle,
+          history: history.length ? history : undefined,
+        }),
+      )
       if (!response) return
 
       const target = response.targets.find((t) => t.blockId === blockId) ?? response.targets[0]
@@ -147,14 +183,16 @@ export function App() {
       const blocks = listBlocks(editor)
       if (!blocks.length) return
 
-      const response = await run(`rewrite the document as ${tone}`, {
-        scope: 'doc',
-        action: 'set_tone',
-        instruction: `Rewrite the document in a ${tone} tone.`,
-        fullDocumentContext: getDocumentMarkdown(editor),
-        docStyleContext: docStyle,
-        blocks,
-      })
+      const response = await run(`rewrite the document as ${tone}`, () =>
+        requestAiAction({
+          scope: 'doc',
+          action: 'set_tone',
+          instruction: `Rewrite the document in a ${tone} tone.`,
+          fullDocumentContext: getDocumentMarkdown(editor),
+          docStyleContext: docStyle,
+          blocks,
+        }),
+      )
       if (!response) return
 
       const known = new Set(blocks.map((block) => block.blockId))
@@ -229,6 +267,50 @@ export function App() {
     [editor, runBlockAction],
   )
 
+  /**
+   * Blank-page outline. A blank document is a single empty paragraph, so the outline is proposed
+   * as that paragraph's replacement: nothing lands in the document until it is accepted, and it
+   * can be refined like any other suggestion.
+   */
+  const proposeStructure = useCallback(
+    async (brief: string) => {
+      if (!editor || !aiEnabled) return
+
+      const response = await run('propose a structure', () => requestStructure({ brief }))
+      if (!response) return
+
+      const [blank] = blockEntries(editor)
+      if (!editor.isEmpty || !blank) {
+        setError('The page is no longer blank, so the outline was not proposed.')
+        return
+      }
+      if (!editor.commands.setSuggestion(blank.blockId, structureToMarkdown(response.sections))) {
+        setError('The AI did not propose an outline.')
+        return
+      }
+
+      origins.current.set(blank.blockId, { action: 'rewrite', history: [] })
+      bump()
+    },
+    [editor, aiEnabled, run, bump],
+  )
+
+  /**
+   * Back to a blank page. The document is emptied in one transaction rather than rebuilt, so a
+   * single undo brings it back; session state is replaced with fresh values, not patched.
+   */
+  const clearDocument = useCallback(() => {
+    if (!editor) return
+    editor.commands.clearAllSuggestions()
+    origins.current = new Map()
+    setDocBatch(new Set())
+    setDocStyle(null)
+    setError(null)
+    hideNow()
+    // Emits an update, which also clears the stored draft.
+    editor.chain().focus().clearContent(true).run()
+  }, [editor, hideNow])
+
   const toggleAi = useCallback(
     (enabled: boolean) => {
       setAiEnabled(enabled)
@@ -247,6 +329,7 @@ export function App() {
 
   const pending = editor ? [...getSuggestions(editor).keys()] : []
   const batchPending = pending.filter((id) => docBatch.has(id))
+  const isBlank = editor?.isEmpty ?? true
 
   /** The text selected inside the hovered block, if the cursor happens to be in it. */
   let selectionText: string | undefined
@@ -270,6 +353,8 @@ export function App() {
         docStyle={docStyle}
         onToneRewrite={runDocTone}
         busy={busy !== null}
+        canClear={!isBlank || pending.length > 0}
+        onClear={clearDocument}
       />
 
       {aiEnabled && batchPending.length > 0 && (
@@ -282,6 +367,12 @@ export function App() {
       )}
 
       <main className="shell">
+        {aiEnabled && isBlank && pending.length === 0 && (
+          <Suspense fallback={null}>
+            <StructurePrompt busy={busy !== null} onPropose={(brief) => void proposeStructure(brief)} />
+          </Suspense>
+        )}
+
         <div
           className="paper"
           ref={setPaper}

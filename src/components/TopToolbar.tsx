@@ -1,5 +1,5 @@
-import { TONE_PRESETS } from '../../shared/contract'
-import type { TonePreset } from '../../shared/contract'
+import { TONE_PRESETS } from '../../shared/contract/aiAction'
+import type { TonePreset } from '../../shared/contract/aiAction'
 
 const TONE_LABELS: Record<TonePreset, string> = {
   formal: 'Formal',
@@ -16,6 +16,9 @@ interface TopToolbarProps {
   docStyle: TonePreset | null
   onToneRewrite: (tone: TonePreset) => void
   busy: boolean
+  /** False when there is nothing to clear: an empty document with no pending proposals. */
+  canClear: boolean
+  onClear: () => void
 }
 
 /**
@@ -29,6 +32,8 @@ export function TopToolbar({
   docStyle,
   onToneRewrite,
   busy,
+  canClear,
+  onClear,
 }: TopToolbarProps) {
   return (
     <header className="top-toolbar">
@@ -48,6 +53,16 @@ export function TopToolbar({
           </button>
         ))}
       </div>
+
+      <button
+        type="button"
+        className="clear-button"
+        disabled={!canClear || busy}
+        title="Start over with a blank page (Ctrl+Z brings it back)"
+        onClick={onClear}
+      >
+        Clear
+      </button>
 
       <label className="ai-toggle">
         <input

@@ -25,7 +25,7 @@ environment — it is never read as a `VITE_*` variable, so it never reaches the
 | `OPENROUTER_API_KEY` | — | required; the proxy returns a readable 500 without it |
 | `OPENROUTER_MODEL` | `google/gemini-2.5-flash-lite` | any OpenRouter model with structured-output support |
 | `PORT` | `8787` | proxy port |
-| `HOST` | `localhost` | proxy bind address; `0.0.0.0` exposes it on all interfaces |
+| `HOSTNAME` | `localhost` | proxy bind address; `0.0.0.0` exposes it on all interfaces |
 
 ## What was built
 
@@ -60,6 +60,12 @@ later block-level edit, so a single paragraph nudge does not drift back out of t
 **AI off means off.** The toggle hides the hover toolbar, blocks every request, and clears any
 pending proposals. What is left is a plain Markdown editor.
 
+**Blank page, saved locally.** The editor opens empty, or with your last draft: the markdown is saved
+to `localStorage` as you type and read back once on load. **Clear** in the header empties the page
+in one undoable step. On a blank page you can describe what you are writing and
+`POST /api/propose-structure` returns an outline, which arrives as an ordinary suggestion to accept,
+reject or refine. Nothing is written into the document until you accept it.
+
 ### How it fits together
 
 ```
@@ -67,11 +73,13 @@ src/editor/        Tiptap setup, per-block ids, markdown serialization,
                    diff → decoration mapping, accept/reject
 src/components/    the two toolbars, the suggestion card, anchor positioning
 src/ai/            the fetch client
-server/            Express proxy: validation, prompt construction, OpenRouter call
-shared/contract.ts the contract — Zod schemas, inferred types, generated JSON Schema
+server/            Express proxy: prompt construction, OpenRouter call
+server/routes/     one file per endpoint: ai-action, propose-structure
+shared/contract/   one contract per endpoint (+ common.ts) — Zod schemas, inferred types,
+                   generated JSON Schema
 ```
 
-**One contract, three jobs.** `shared/contract.ts` holds Zod schemas that are the single source of
+**One contract, three jobs.** `shared/contract/` holds Zod schemas that are the single source of
 truth. The TypeScript types are inferred from them (`z.infer`), both the proxy and the browser
 validate against them, and the JSON Schema the model is constrained to is *generated* from the same
 schema via `z.toJSONSchema()`. Zod emits `additionalProperties: false` with every property required,

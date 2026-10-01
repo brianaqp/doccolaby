@@ -1,5 +1,14 @@
-import { AI_RESPONSE_JSON_SCHEMA, aiActionResponseSchema, formatZodError } from '../shared/contract.ts'
-import type { AiActionResponse } from '../shared/contract.ts'
+import type { z } from 'zod'
+
+import { AI_RESPONSE_JSON_SCHEMA, aiActionResponseSchema } from '../shared/contract/aiAction.ts'
+import type { AiActionResponse } from '../shared/contract/aiAction.ts'
+import { formatZodError } from '../shared/contract/common.ts'
+import type { ResponseFormat } from '../shared/contract/common.ts'
+import { STRUCTURE_RESPONSE_JSON_SCHEMA, structureResponseSchema } from '../shared/contract/structure.ts'
+import type { StructureResponse } from '../shared/contract/structure.ts'
+
+export const MISSING_KEY =
+  'OPENROUTER_API_KEY is not set. Copy .env.example to .env and put your OpenRouter key in it, then restart the server.'
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 
@@ -20,7 +29,7 @@ function preview(text: string): string {
  * `strict` is a provider-side promise rather than a guarantee, so the reply is parsed against
  * that same schema before it is allowed anywhere near the client.
  */
-function parseResponse(content: string): AiActionResponse {
+function parseResponse<T>(content: string, schema: z.ZodType<T>): T {
   let json: unknown
   try {
     json = JSON.parse(content)
@@ -28,7 +37,7 @@ function parseResponse(content: string): AiActionResponse {
     throw new Error(`The model replied with text instead of JSON: "${preview(content)}"`)
   }
 
-  const parsed = aiActionResponseSchema.safeParse(json)
+  const parsed = schema.safeParse(json)
   if (!parsed.success) {
     throw new Error(`The model reply did not match the contract — ${formatZodError(parsed.error)}`)
   }
@@ -36,10 +45,15 @@ function parseResponse(content: string): AiActionResponse {
 }
 
 /**
- * Asks OpenRouter for one structured edit. `require_parameters` keeps the request
+ * Asks OpenRouter for one structured reply. `require_parameters` keeps the request
  * on providers that actually honour the JSON schema instead of silently ignoring it.
  */
-export async function requestStructuredEdit(system: string, user: string): Promise<AiActionResponse> {
+async function requestStructured<T>(
+  system: string,
+  user: string,
+  responseFormat: ResponseFormat,
+  schema: z.ZodType<T>,
+): Promise<T> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set.')
 
@@ -58,7 +72,7 @@ export async function requestStructuredEdit(system: string, user: string): Promi
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
-      response_format: { type: 'json_schema', json_schema: AI_RESPONSE_JSON_SCHEMA },
+      response_format: { type: 'json_schema', json_schema: responseFormat },
       provider: { require_parameters: true },
     }),
   })
@@ -80,5 +94,13 @@ export async function requestStructuredEdit(system: string, user: string): Promi
     throw new Error('OpenRouter returned no message content.')
   }
 
-  return parseResponse(content)
+  return parseResponse(content, schema)
+}
+
+export function requestStructuredEdit(system: string, user: string): Promise<AiActionResponse> {
+  return requestStructured(system, user, AI_RESPONSE_JSON_SCHEMA, aiActionResponseSchema)
+}
+
+export function requestStructureProposal(system: string, user: string): Promise<StructureResponse> {
+  return requestStructured(system, user, STRUCTURE_RESPONSE_JSON_SCHEMA, structureResponseSchema)
 }

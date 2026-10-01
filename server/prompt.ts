@@ -1,5 +1,6 @@
-import { AI_ACTIONS } from '../shared/contract.ts'
-import type { AiAction, AiActionRequest } from '../shared/contract.ts'
+import { AI_ACTIONS } from '../shared/contract/aiAction.ts'
+import type { AiAction, AiActionRequest } from '../shared/contract/aiAction.ts'
+import type { StructureRequest } from '../shared/contract/structure.ts'
 
 export interface Prompts {
   system: string
@@ -119,4 +120,22 @@ function userPrompt(req: AiActionRequest): string {
 
 export function buildPrompts(req: AiActionRequest): Prompts {
   return { system: systemPrompt(req), user: userPrompt(req) }
+}
+
+/** Blank-page outline: structure only, never finished prose — the user writes the document. */
+export function buildStructurePrompts(req: StructureRequest): Prompts {
+  const system = [
+    'You are an editor helping a writer start a markdown document from a blank page.',
+    'Propose a clear, conventional structure for the document they describe — an outline, not the document itself.',
+    '',
+    'Output rules — these are absolute:',
+    '- Reply with a single JSON object matching the required schema: { "sections": [{ "level": number, "heading": string, "intent": string }] }.',
+    '- No commentary, no explanation, no markdown code fences around the JSON.',
+    '- Start with exactly one level-1 entry: the document title, with an empty intent.',
+    '- Then 3 to 8 level-2 sections, with level-3 subsections only where they genuinely help.',
+    '- Headings are short and specific to the brief, never generic placeholders like "Section 1".',
+    '- intent is one sentence telling the writer what belongs in that section. Do not write the section itself.',
+  ].join('\n')
+
+  return { system, user: `WHAT THE USER IS WRITING\n${req.brief}` }
 }

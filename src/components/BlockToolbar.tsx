@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AiAction } from '../../shared/contract'
+import type { AiAction } from '../../shared/contract/aiAction'
 
 const QUICK_ACTIONS: Array<{ action: AiAction; label: string; title: string }> = [
   { action: 'rewrite', label: 'Rewrite', title: 'Rewrite this paragraph' },
