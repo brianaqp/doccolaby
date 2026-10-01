@@ -9,7 +9,8 @@
     "dev:web": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "NODE_ENV=production node server/index.ts"
   },
   "dependencies": {
     "@tiptap/core": "^3.31.4",
@@ -39,5 +40,8 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }

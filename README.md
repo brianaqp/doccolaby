@@ -25,7 +25,7 @@ environment — it is never read as a `VITE_*` variable, so it never reaches the
 | `OPENROUTER_API_KEY` | — | required; the proxy returns a readable 500 without it |
 | `OPENROUTER_MODEL` | `google/gemini-2.5-flash-lite` | any OpenRouter model with structured-output support |
 | `PORT` | `8787` | proxy port |
-| `HOSTNAME` | `localhost` | proxy bind address; `0.0.0.0` exposes it on all interfaces |
+| `HOST` | `localhost` | proxy bind address; `0.0.0.0` exposes it on all interfaces |
 
 ## What was built
 
