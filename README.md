@@ -1,5 +1,7 @@
 # doccolaby
 
+**Live demo:** https://doccolaby-production.up.railway.app/
+
 A browser-based Markdown editor where an AI collaborator proposes edits as **inline tracked
 changes** you accept, reject, or refine — one paragraph at a time. No chat panel, no sidebar, no
 "generate my document" button.
