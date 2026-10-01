@@ -39,18 +39,42 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Mirrors of the live hover state for the mousemove handler: the block currently shown,
+  // and the target (a block id, or null for hide) the pending timer will switch to.
+  const shownId = useRef<string | null>(null)
+  const pendingTarget = useRef<string | null | undefined>(undefined)
 
-  const cancelHide = useCallback(() => clearTimeout(hideTimer.current), [])
-  /** Drop the hover target after a grace period, so the pointer can travel block -> toolbar. */
-  const scheduleHide = useCallback(() => {
-    clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setHoveredId(null), HOVER_HIDE_DELAY_MS)
+  const showHover = useCallback((id: string | null) => {
+    shownId.current = id
+    setHoveredId(id)
   }, [])
+  const cancelHide = useCallback(() => {
+    clearTimeout(hideTimer.current)
+    pendingTarget.current = undefined
+  }, [])
+  /**
+   * Retarget the hover (to another block, or to nothing) after a grace period, so the
+   * pointer can travel block -> toolbar even when it crosses a neighbouring block.
+   * Repeated calls for the same target keep the original deadline.
+   */
+  const scheduleHover = useCallback(
+    (id: string | null) => {
+      if (pendingTarget.current === id) return
+      clearTimeout(hideTimer.current)
+      pendingTarget.current = id
+      hideTimer.current = setTimeout(() => {
+        pendingTarget.current = undefined
+        showHover(id)
+      }, HOVER_HIDE_DELAY_MS)
+    },
+    [showHover],
+  )
+  const scheduleHide = useCallback(() => scheduleHover(null), [scheduleHover])
   /** Hide right now, skipping the grace period. */
   const hideNow = useCallback(() => {
-    clearTimeout(hideTimer.current)
-    setHoveredId(null)
-  }, [])
+    cancelHide()
+    showHover(null)
+  }, [cancelHide, showHover])
   useEffect(() => () => clearTimeout(hideTimer.current), [])
 
   // Bumped whenever suggestions change, so the floating cards re-read editor storage and
@@ -265,10 +289,13 @@ export function App() {
             if (!editor || !aiEnabled) return
             const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
             const id = at ? getBlockIdAt(editor, at.pos) : null
-            if (id) {
-              // Show immediately, and keep it alive while the pointer stays on the block.
+            if (id && (shownId.current === null || shownId.current === id)) {
+              // Nothing shown yet: show immediately. Same block: keep it alive.
               cancelHide()
-              setHoveredId(id)
+              showHover(id)
+            } else if (id) {
+              // Another block's toolbar is up: give it the grace period before switching.
+              scheduleHover(id)
             } else {
               scheduleHide()
             }
