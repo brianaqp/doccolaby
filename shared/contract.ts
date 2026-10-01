@@ -49,6 +49,7 @@ export const aiActionRequestSchema = z
     /** Free-form user instruction. Empty for preset buttons, which rely on `action` alone. */
     instruction: z.string().optional(),
     /** Always sent, even for a single block, so the model never rewrites blind to surrounding style. */
+    /** NOTE: This can be a burn token feature! It's ok for small docs, but will require better context engineering techniques */
     fullDocumentContext: z.string(),
     /** The last whole-doc tone applied this session, so block edits stay consistent with it. */
     docStyleContext: tonePresetSchema.nullish(),
