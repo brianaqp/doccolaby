@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 
 import type { AiAction, AiActionRequest, RefineTurn, TonePreset } from '../shared/contract'
@@ -9,6 +10,7 @@ import { getSuggestion, getSuggestions } from './editor/SuggestionDecorations'
 import { acceptSuggestion, rejectSuggestion } from './editor/applySuggestion'
 import { anchorForBlock } from './components/anchors'
 import { BlockToolbar } from './components/BlockToolbar'
+import { DocReviewBar } from './components/DocReviewBar'
 import { SuggestionCard } from './components/SuggestionCard'
 import { TopToolbar } from './components/TopToolbar'
 
@@ -27,6 +29,9 @@ export function App() {
   // so mounting it has to trigger a render or the first measurement has nothing to measure.
   const [paper, setPaper] = useState<HTMLDivElement | null>(null)
   const origins = useRef(new Map<string, SuggestionOrigin>())
+  // Blocks proposed by the latest whole-document rewrite. They are reviewed through one
+  // accept/reject bar instead of a card each.
+  const [docBatch, setDocBatch] = useState<ReadonlySet<string>>(new Set())
 
   const [aiEnabled, setAiEnabled] = useState(true)
   const [docStyle, setDocStyle] = useState<TonePreset | null>(null)
@@ -130,12 +135,16 @@ export function App() {
 
       const known = new Set(blocks.map((block) => block.blockId))
       let applied = 0
+      const batch = new Set<string>()
       for (const target of response.targets) {
         if (!known.has(target.blockId)) continue
         if (!editor.commands.setSuggestion(target.blockId, target.content)) continue
         origins.current.set(target.blockId, { action: 'set_tone', history: [] })
+        batch.add(target.blockId)
         applied += 1
       }
+      // A new rewrite supersedes any earlier one still waiting for review.
+      setDocBatch(batch)
 
       // The tone is remembered even if nothing changed, so later block edits stay consistent.
       setDocStyle(tone)
@@ -165,6 +174,20 @@ export function App() {
     [editor, bump],
   )
 
+  const resolveBatch = useCallback(
+    (resolve: (editor: Editor, blockId: string) => boolean) => {
+      if (!editor) return
+      for (const blockId of docBatch) {
+        if (!getSuggestion(editor, blockId)) continue
+        resolve(editor, blockId)
+        origins.current.delete(blockId)
+      }
+      setDocBatch(new Set())
+      bump()
+    },
+    [editor, docBatch, bump],
+  )
+
   /** Re-asks with the current proposal plus the new instruction — same block, multi-turn. */
   const refine = useCallback(
     async (blockId: string, instruction: string) => {
@@ -190,6 +213,7 @@ export function App() {
         // With AI off this is a plain markdown editor — no stray proposals left behind.
         editor.commands.clearAllSuggestions()
         origins.current.clear()
+        setDocBatch(new Set())
         hideNow()
         bump()
       }
@@ -198,6 +222,7 @@ export function App() {
   )
 
   const pending = editor ? [...getSuggestions(editor).keys()] : []
+  const batchPending = pending.filter((id) => docBatch.has(id))
 
   /** The text selected inside the hovered block, if the cursor happens to be in it. */
   let selectionText: string | undefined
@@ -222,6 +247,15 @@ export function App() {
         onToneRewrite={runDocTone}
         busy={busy !== null}
       />
+
+      {aiEnabled && batchPending.length > 0 && (
+        <DocReviewBar
+          count={batchPending.length}
+          busy={busy !== null}
+          onAcceptAll={() => resolveBatch(acceptSuggestion)}
+          onRejectAll={() => resolveBatch(rejectSuggestion)}
+        />
+      )}
 
       <main className="shell">
         <div
@@ -261,6 +295,7 @@ export function App() {
 
           {editor &&
             pending.map((blockId) => {
+              if (docBatch.has(blockId)) return null
               const anchor = anchorForBlock(editor, blockId, paper)
               if (!anchor) return null
               return (
@@ -279,7 +314,7 @@ export function App() {
 
         <p className="hint">
           {aiEnabled
-            ? 'Hover a paragraph for AI actions, or select text inside it first to narrow the edit. Proposals appear inline — accept, reject, or refine each one.'
+            ? 'Hover a paragraph for AI actions, or select text inside it first to narrow the edit. Proposals appear inline — accept, reject, or refine each one. A whole-document rewrite is accepted or rejected in one go.'
             : 'AI is off. This is a plain markdown editor.'}
         </p>
       </main>

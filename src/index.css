@@ -271,3 +271,31 @@ button:disabled {
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* ---------- whole-document review ---------- */
+
+.doc-review-bar {
+  position: sticky;
+  top: 49px;
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  font-size: 13px;
+  background: var(--pending);
+  border-bottom: 1px solid var(--line);
+}
+
+.doc-review-bar span {
+  margin-right: auto;
+}
+
+.doc-review-bar .accept {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.doc-review-bar .reject {
+  color: var(--delete-ink);
+}
