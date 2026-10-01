@@ -49,7 +49,9 @@ app.use((err: unknown, _req: Request, res: Response<AiErrorResponse>, _next: Nex
 })
 
 const port = Number(process.env.PORT ?? 8787)
+// Set HOSTNAME=0.0.0.0 to expose the proxy beyond this machine.
+const hostname = process.env.HOSTNAME ?? 'localhost'
 
-app.listen(port, () => {
-  console.log(`AI proxy listening on http://localhost:${port} (model: ${modelInUse()})`)
+app.listen(port, hostname, () => {
+  console.log(`AI proxy listening on http://${hostname}:${port} (model: ${modelInUse()})`)
 })
